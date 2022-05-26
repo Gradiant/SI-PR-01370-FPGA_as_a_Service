@@ -48,6 +48,12 @@ const (
 	ADVANTECH_ID   = "0x13fe"
 	AWS_ID         = "0x1d0f"
 	AristaVendorID = "0x3475"
+	// Embedded consts
+	EmbeddedDevices = "/sys/bus/platform/devices"
+	ModaliasFile    = "modalias"
+	DevFile         = "dev"
+	UeventFile      = "uevent"
+	MODALIAS        = "of:Nzyxclmm_drmT(NULL)Cxlnx,zocl"
 )
 
 type Pairs struct {
@@ -281,6 +287,67 @@ func GetDevices() ([]Device, error) {
 			pairMap[DBD].Mgmt = MgmtPrefix + content
 		}
 	}
+
+	platformFiles, err := ioutil.ReadDir(EmbeddedDevices)
+	if err != nil {
+		return nil, fmt.Errorf("Can't read folder %s", EmbeddedDevices)
+	}
+	for _, platformFile := range platformFiles {
+		fileName := platformFile.Name()
+		mFile := path.Join(EmbeddedDevices, fileName, ModaliasFile)
+		mFileContent, err := GetFileContent(mFile)
+		if err != nil {
+			return nil, err
+		}
+		if strings.EqualFold(mFileContent, MODALIAS) != true {
+			continue
+		}
+		DBD := fileName[:8]
+		if _, ok := pairMap[DBD]; !ok {
+			pairMap[DBD] = &Pairs{
+				Mgmt: "",
+				User: "",
+				Qdma: "",
+			}
+		}
+		userDBDF := fileName
+		userpf, err := GetFileNameFromPrefix(path.Join(EmbeddedDevices, fileName, UserPFKeyword), DRMSTR)
+		if err != nil {
+			return nil, err
+		}
+		userNode := path.Join(UserPrefix, userpf)
+		pairMap[DBD].User = userNode
+		//for k,v := range pairMap{
+		//	fmt.Printf("key %v is:%v\n",k,*v)
+		//}
+		dev := path.Join(EmbeddedDevices, fileName, UserPFKeyword, userpf, DevFile)
+		content, err := GetFileContent(dev)
+		if err != nil {
+			return nil, err
+		}
+		devid := content
+		uevent := path.Join(EmbeddedDevices, fileName, UserPFKeyword, userpf, UeventFile)
+		content, err = GetFileContent(uevent)
+		if err != nil {
+			return nil, err
+		}
+		contents := strings.Split(content, "\n")
+		dsaVer := strings.Split(contents[3], "=")[1]
+		SN := "zcu-Node"
+		dsaTs := "20191217"
+		healthy := pluginapi.Healthy
+		devices = append(devices, Device{
+			index:     strconv.Itoa(len(devices) + 1),
+			shellVer:  dsaVer,
+			timestamp: dsaTs,
+			DBDF:      userDBDF,
+			deviceID:  devid,
+			Healthy:   healthy,
+			SN:        SN,
+			Nodes:     pairMap[DBD],
+		})
+	}
+
 	return devices, nil
 }
 
@@ -290,7 +357,7 @@ func main() {
 	if err != nil {
                 fmt.Printf("%s !!!\n", err)
                 return
-        }
+		}
 
         //SNFolder, err := GetFileNameFromPrefix(path.Join(SysfsDevices, "0000:e3:00.1"), SNSTR)
 	//fname := path.Join(SysfsDevices, "0000:e3:00.1", SNFolder, SNFile)
