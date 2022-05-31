@@ -34,7 +34,7 @@ spec:
       tolerations:
       - key: CriticalAddonsOnly
         operator: Exists
-      - key: fpga
+      - key: xilinx.com/fpga
         operator: Exists
       containers:
       - image: gradiant/xilinx-device-plugin:0.0.1
